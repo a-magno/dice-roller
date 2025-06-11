@@ -10,7 +10,10 @@ export class Lexer {
     private readChar() { this.ch = this.readPosition >= this.input.length ? '' : this.input[this.readPosition]; this.position = this.readPosition; this.readPosition += 1; }
     private peekChar() { return this.readPosition >= this.input.length ? '' : this.input[this.readPosition]; }
     private skipWhitespace() { while (/\s/.test(this.ch)) this.readChar(); }
-    private readNumber() { const start = this.position; while (/\d/.test(this.ch)) this.readChar(); return this.input.substring(start, this.position); }
+
+    private isLetter(char: string): boolean { return 'a' <= char && char <= 'z' || 'A' <= char && char <= 'Z' || char === '_'; }
+    private readIdentifier(): string { const start = this.position; while (this.isLetter(this.ch)) { this.readChar(); } return this.input.substring(start, this.position); }
+    private readNumber(): string { const start = this.position; while (/\d/.test(this.ch)) { this.readChar(); } return this.input.substring(start, this.position); }
 
     public nextToken(): Token {
         this.skipWhitespace(); let token: Token;
@@ -26,7 +29,10 @@ export class Lexer {
             case '>': token = this.peekChar() === '=' ? (this.readChar(), { type: TokenType.GREATER_THAN_OR_EQUAL, literal: '>=' }) : { type: TokenType.GREATER_THAN, literal: '>' }; break;
             case '<': token = this.peekChar() === '=' ? (this.readChar(), { type: TokenType.LESS_THAN_OR_EQUAL, literal: '<=' }) : { type: TokenType.LESS_THAN, literal: '<' }; break;
             case '': token = { type: TokenType.EOF, literal: "" }; break;
-            default: if (/\d/.test(this.ch)) return { type: TokenType.NUMBER, literal: this.readNumber() }; token = { type: TokenType.ILLEGAL, literal: this.ch };
+            default:
+                if (this.isLetter(this.ch)) { return { type: TokenType.IDENTIFIER, literal: this.readIdentifier() }; }
+                if (/\d/.test(this.ch)) { return { type: TokenType.NUMBER, literal: this.readNumber() }; }
+                token = { type: TokenType.ILLEGAL, literal: this.ch };
         }
         this.readChar(); return token;
     }

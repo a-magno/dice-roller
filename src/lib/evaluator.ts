@@ -1,34 +1,58 @@
-import { type ASTNode, NumberLiteral, DiceExpression, InfixExpression, PrefixExpression } from './ast';
-import type { DieRoll } from './types';
+import { type ASTNode, NumberLiteral, Identifier, DiceExpression, InfixExpression, PrefixExpression } from './ast';
+import type { DieRoll, VariableContext } from './types';
 
 export class Evaluator {
-    // This now holds the detailed results for the entire evaluation
     public detailedRolls: DieRoll[] = [];
+    private errors: string[] = [];
 
-    public evaluate(node: ASTNode | null): number | null {
+    public getErrors = () => this.errors;
+
+    public evaluate(node: ASTNode | null, context: VariableContext): number | null {
         if (!node) return null;
-        this.detailedRolls = []; // Reset for each new evaluation
-        return this.evalNode(node);
+        this.detailedRolls = [];
+        this.errors = [];
+        return this.evalNode(node, context);
     }
 
-    private evalNode(node: ASTNode): number {
+    private evalNode(node: ASTNode, context: VariableContext): number {
         if (node instanceof NumberLiteral) return node.value;
-        if (node instanceof DiceExpression) return this.evalDiceExpression(node);
-        if (node instanceof InfixExpression) return this.evalInfixExpression(node.operator, this.evalNode(node.left), this.evalNode(node.right));
-        if (node instanceof PrefixExpression) return this.evalPrefixExpression(node.operator, this.evalNode(node.right));
+        if (node instanceof Identifier) return this.evalIdentifier(node, context);
+        if (node instanceof DiceExpression) return this.evalDiceExpression(node, context);
+        if (node instanceof InfixExpression) return this.evalInfixExpression(node.operator, this.evalNode(node.left, context), this.evalNode(node.right, context));
+        if (node instanceof PrefixExpression) return this.evalPrefixExpression(node.operator, this.evalNode(node.right, context));
         return 0;
     }
     
-    private evalPrefixExpression = (op: string, r: number) => (op === "-") ? -r : 0;
-    private evalInfixExpression(op: string, l: number, r: number): number {
-        switch (op) { case '+': return l + r; case '-': return l - r; case '*': return Math.floor(l * r); case '/': return Math.floor(l / r); default: return 0; }
+    private evalIdentifier(node: Identifier, context: VariableContext): number {
+        const value = context[node.value];
+        if (value === undefined) {
+            this.errors.push(`Undefined variable: ${node.value}`);
+            return 0;
+        }
+        return value;
     }
 
-    private evalDiceExpression(node: DiceExpression): number {
-        const count = this.evalNode(node.count);
-        const sides = this.evalNode(node.sides);
-        if (sides <= 0) return 0;
+    private evalPrefixExpression = (op: string, r: number) => (op === "-") ? -r : 0;
+    
+    // UPDATED: Added cases for the new comparison operators.
+    private evalInfixExpression(op: string, l: number, r: number): number {
+        switch (op) {
+            case '+': return l + r;
+            case '-': return l - r;
+            case '*': return Math.floor(l * r);
+            case '/': return Math.floor(l / r);
+            case '>': return l > r ? 1 : 0;
+            case '<': return l < r ? 1 : 0;
+            case '>=': return l >= r ? 1 : 0;
+            case '<=': return l <= r ? 1 : 0;
+            default: return 0;
+        }
+    }
 
+    private evalDiceExpression(node: DiceExpression, context: VariableContext): number {
+        const count = this.evalNode(node.count, context);
+        const sides = this.evalNode(node.sides, context);
+        if (sides <= 0) return 0;
         let currentDetailedRolls: DieRoll[] = [];
         let successCount = 0;
 
@@ -36,31 +60,20 @@ export class Evaluator {
             const initialValue = Math.floor(Math.random() * sides) + 1;
             let finalValue = initialValue;
             let wasRerolled = false;
-
-            // Handle rerolls
             if (node.reroll) {
                 while (this.checkCondition(finalValue, node.reroll.operator, node.reroll.value)) {
                     wasRerolled = true;
                     finalValue = Math.floor(Math.random() * sides) + 1;
                 }
             }
-
-            // Handle success counting
             let isSuccess: boolean | undefined = undefined;
             if (node.success) {
                 isSuccess = this.checkCondition(finalValue, node.success.operator, node.success.value);
-                if (isSuccess) {
-                    successCount++;
-                }
+                if (isSuccess) successCount++;
             }
-
             currentDetailedRolls.push({ initialValue, finalValue, wasRerolled, isSuccess });
         }
-
-        // Add this batch of rolls to the main list
         this.detailedRolls.push(...currentDetailedRolls);
-
-        // Return either the sum of final values or the number of successes
         return node.success ? successCount : currentDetailedRolls.reduce((sum, roll) => sum + roll.finalValue, 0);
     }
 
