@@ -11,8 +11,11 @@ export class Lexer {
     private peekChar() { return this.readPosition >= this.input.length ? '' : this.input[this.readPosition]; }
     private skipWhitespace() { while (/\s/.test(this.ch)) this.readChar(); }
 
-    private isLetter(char: string): boolean { return 'a' <= char && char <= 'z' || 'A' <= char && char <= 'Z' || char === '_'; }
-    private readIdentifier(): string { const start = this.position; while (this.isLetter(this.ch)) { this.readChar(); } return this.input.substring(start, this.position); }
+    private isLetter(char: string): boolean { return ('a' <= char && char <= 'z') || ('A' <= char && char <= 'Z') || char === '_'; }
+    // UPDATED: Now includes '.' to allow for 'sheet.property' syntax
+    private isIdentifierChar(char: string): boolean { return this.isLetter(char) || /\d/.test(char) || char === '.';}
+    
+    private readIdentifier(): string { const start = this.position; while (this.isIdentifierChar(this.ch)) { this.readChar(); } return this.input.substring(start, this.position); }
     private readNumber(): string { const start = this.position; while (/\d/.test(this.ch)) { this.readChar(); } return this.input.substring(start, this.position); }
 
     public nextToken(): Token {

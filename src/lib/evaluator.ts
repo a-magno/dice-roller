@@ -1,4 +1,4 @@
-import { type ASTNode, NumberLiteral, Identifier, DiceExpression, InfixExpression, PrefixExpression } from './ast';
+import { ASTNode, NumberLiteral, Identifier, DiceExpression, InfixExpression, PrefixExpression } from './ast';
 import type { DieRoll, VariableContext } from './types';
 
 export class Evaluator {
@@ -22,59 +22,64 @@ export class Evaluator {
         if (node instanceof PrefixExpression) return this.evalPrefixExpression(node.operator, this.evalNode(node.right, context));
         return 0;
     }
-    
+
     private evalIdentifier(node: Identifier, context: VariableContext): number {
         const value = context[node.value];
-        if (value === undefined) {
-            this.errors.push(`Undefined variable: ${node.value}`);
+        if (value === undefined || isNaN(value)) {
             return 0;
         }
         return value;
     }
 
     private evalPrefixExpression = (op: string, r: number) => (op === "-") ? -r : 0;
-    
-    // UPDATED: Added cases for the new comparison operators.
+
     private evalInfixExpression(op: string, l: number, r: number): number {
         switch (op) {
-            case '+': return l + r;
-            case '-': return l - r;
-            case '*': return Math.floor(l * r);
-            case '/': return Math.floor(l / r);
-            case '>': return l > r ? 1 : 0;
-            case '<': return l < r ? 1 : 0;
-            case '>=': return l >= r ? 1 : 0;
-            case '<=': return l <= r ? 1 : 0;
+            case '+': return l + r; case '-': return l - r;
+            case '*': return Math.floor(l * r); case '/': return Math.floor(l / r);
+            case '>': return l > r ? 1 : 0; case '<': return l < r ? 1 : 0;
+            case '>=': return l >= r ? 1 : 0; case '<=': return l <= r ? 1 : 0;
             default: return 0;
         }
     }
 
+    // CORRECTED: The reroll loop now accurately tracks all discarded die values.
     private evalDiceExpression(node: DiceExpression, context: VariableContext): number {
         const count = this.evalNode(node.count, context);
         const sides = this.evalNode(node.sides, context);
         if (sides <= 0) return 0;
         let currentDetailedRolls: DieRoll[] = [];
         let successCount = 0;
-
         for (let i = 0; i < count; i++) {
-            const initialValue = Math.floor(Math.random() * sides) + 1;
-            let finalValue = initialValue;
+            const firstRoll = Math.floor(Math.random() * sides) + 1;
+            let currentRollValue = firstRoll;
             let wasRerolled = false;
+            const rerolledValues: number[] = [];
+
             if (node.reroll) {
-                while (this.checkCondition(finalValue, node.reroll.operator, node.reroll.value)) {
+                while (this.checkCondition(currentRollValue, node.reroll.operator, node.reroll.value)) {
                     wasRerolled = true;
-                    finalValue = Math.floor(Math.random() * sides) + 1;
+                    rerolledValues.push(currentRollValue); // Log the value being discarded
+                    currentRollValue = Math.floor(Math.random() * sides) + 1;
                 }
             }
-            let isSuccess: boolean | undefined = undefined;
+            
+            let isSuccess: boolean | undefined;
             if (node.success) {
-                isSuccess = this.checkCondition(finalValue, node.success.operator, node.success.value);
+                isSuccess = this.checkCondition(currentRollValue, node.success.operator, node.success.value);
                 if (isSuccess) successCount++;
             }
-            currentDetailedRolls.push({ initialValue, finalValue, wasRerolled, isSuccess });
+            
+            currentDetailedRolls.push({ 
+                initialValue: firstRoll, 
+                finalValue: currentRollValue, 
+                wasRerolled, 
+                rerolledValues,
+                isSuccess 
+            });
         }
         this.detailedRolls.push(...currentDetailedRolls);
-        return node.success ? successCount : currentDetailedRolls.reduce((sum, roll) => sum + roll.finalValue, 0);
+        return node.success ? successCount : currentDetailedRolls.reduce((sum, r) => sum + r.finalValue, 0);
     }
 
     private checkCondition(roll: number, op: string, val: number): boolean {

@@ -25,7 +25,7 @@ export const precedences: { [key in TokenType]?: Precedence } = {
 };
 
 export type VariableContext = { [key: string]: number };
-export interface DieRoll { initialValue: number; finalValue: number; isSuccess?: boolean; wasRerolled: boolean; }
+export interface DieRoll { initialValue: number; finalValue: number; isSuccess?: boolean; wasRerolled: boolean; rerolledValues: number[]; }
 export interface DiceFormatConfig { default?: string; success?: string; failure?: string; reroll?: string; separator?: string; }
 export interface RollResult { title?: string; expression: string; value: number; successes?: number; rolls: number[]; rerolled: number[]; detailedRolls: DieRoll[]; formattedString?: string; }
 export type RollOutcome = RollResult | { errors: string[] };
